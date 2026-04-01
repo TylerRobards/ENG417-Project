@@ -139,7 +139,9 @@ sys_lat = ss(A_lat, B_lat, C_lat, D_lat);
 %% Model Verification
 lat_poles = pole(sys_long)
 long_poles = pole(sys_lat)
-% pzplot(sys_long)
+figure;
+pzplot(sys_long);
+figure;
 pzplot(sys_lat)
 
 t = 0:0.01:10; % Timescale for sims

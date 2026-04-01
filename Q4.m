@@ -1,5 +1,5 @@
 %{  
-ENG417 Project - Question 2
+ENG417 Project - Question 4
 Use the major and minor loop design techniques to design a pitch attitude hold control system.
 %}
 %% Define System Variables
@@ -127,5 +127,175 @@ B_lat = [y_delta_a y_delta_r; l_delta_a l_delta_r; n_delta_a n_delta_r; 0 0];
 C_lat = eye(4);
 D_lat = zeros(4,2);
 sys_lat = ss(A_lat, B_lat, C_lat, D_lat);
+%% Design Minor Loop
+tau_elevator = 0.02; % Elevator actuator lag time constant
+g_a = tf(1,[tau_elevator 1]); % Actuator lag block 
+B_E = B_long(:,1);
+G_q = tf(ss(A_long, B_E, [0 0 1 0], 0));
 
-%% 
+% Inner-loop open-loop transfer function
+L = minreal(g_a * G_q);
+% Get numerator and denominator vectors
+[num, den] = tfdata(L, 'v');
+% Choose target damping ratio for the short-period poles
+zeta_des = 0.7;   
+% Function: imaginary part of K2 should be zero for a valid real gain
+imagK = @(wn) imag( polyval(den, ...
+    (-zeta_des*wn + 1j*wn*sqrt(1-zeta_des^2))) / ...
+    polyval(num, ...
+    (-zeta_des*wn + 1j*wn*sqrt(1-zeta_des^2))) );
+
+% Solve for wn
+wn_sol = fzero(imagK, [1 200]);
+
+% Desired pole
+sd = -zeta_des*wn_sol + 1j*wn_sol*sqrt(1-zeta_des^2);
+
+% Compute K2
+K2 = polyval(den, sd) / polyval(num, sd);
+K2 = -1*real(K2);
+
+fprintf('Chosen damping ratio zeta = %.4f\n', zeta_des);
+fprintf('Solved wn = %.4f rad/s\n', wn_sol);
+fprintf('Desired pole sd = %.4f %+.4fj\n', real(sd), imag(sd));
+fprintf('Computed K2 = %.6f\n', K2);
+
+% Closed-loop inner loop
+% Use +1 because your stabilising convention was positive feedback
+% with positive K2, equivalent to negative k in feedback(k*L,1)
+Tq = feedback(K2 * L, 1);
+
+disp('Closed-loop poles:')
+pole(Tq)
+
+disp('Closed-loop damping data:')
+damp(Tq)
+
+figure;
+step(Tq, 20)
+grid on
+title(sprintf('Minor Loop response with K2 = %.4f', K2))
+
+info = stepinfo(Tq);
+disp(info)
+
+%% Design Major Loop
+Ctheta = [0 0 0 1];
+
+% Transfer functions
+G_theta = tf(ss(A_long, B_E, Ctheta, 0));  % delta_e -> theta
+
+% Outer-loop plant with inner loop closed
+G_theta_in = minreal((g_a*G_theta) / (1 + K2*g_a*G_q));
+
+% Numerator and denominator of outer-loop plant
+[num_th, den_th] = tfdata(G_theta_in,'v');
+
+% Desired damping ratio for outer loop
+zeta_des = 0.6;
+
+% Function whose zero gives a real K1
+imagK1 = @(wn) imag( -polyval(den_th, ...
+    (-zeta_des*wn + 1j*wn*sqrt(1-zeta_des^2))) / ...
+    polyval(num_th, ...
+    (-zeta_des*wn + 1j*wn*sqrt(1-zeta_des^2))) );
+
+% Scan over wn to find sign changes
+wn_test = linspace(0.01,50,50000);
+vals = arrayfun(imagK1, wn_test);
+
+figure;
+plot(wn_test, vals, 'LineWidth', 1.2);
+grid on;
+xlabel('\omega_n (rad/s)');
+ylabel('imag(K1)');
+title('Imaginary part of K1 versus \omega_n');
+yline(0,'k--');
+
+idx = find(vals(1:end-1).*vals(2:end) < 0);
+
+if isempty(idx)
+    error('No sign changes found in the scanned interval. Increase scan range or change zeta_des.');
+else
+    fprintf('Candidate intervals for fzero:\n');
+    for i = idx
+        fprintf('[%.6f, %.6f]\n', wn_test(i), wn_test(i+1));
+    end
+end
+
+% Use first sign-change interval
+a = wn_test(idx(2));
+b = wn_test(idx(2)+1);
+
+fprintf('\nUsing interval [%.6f, %.6f] for fzero.\n', a, b);
+
+wn_sol = fzero(imagK1, [a b]);
+
+% Desired dominant pole
+sd = -zeta_des*wn_sol + 1j*wn_sol*sqrt(1-zeta_des^2);
+
+% Compute K1
+K1 = -polyval(den_th, sd) / polyval(num_th, sd);
+K1 = real(K1);
+
+fprintf('\nChosen damping ratio zeta = %.4f\n', zeta_des);
+fprintf('Solved wn = %.4f rad/s\n', wn_sol);
+fprintf('Desired pole sd = %.4f %+.4fj\n', real(sd), imag(sd));
+fprintf('Computed K1 = %.6f\n', K1);
+
+% Closed-loop outer loop
+T_theta = feedback(K1*G_theta_in, 1);
+
+disp('Closed-loop poles:');
+disp(pole(T_theta));
+
+disp('Closed-loop damping data:');
+damp(T_theta);
+
+figure;
+step(T_theta, 20);
+grid on;
+title(sprintf('Closed Loop pitch-attitude response with K1 = %.4f', K1));
+
+info = stepinfo(T_theta);
+disp('Step info:');
+disp(info);
+
+% Optional: root locus of the outer loop
+figure;
+rlocus(G_theta_in);
+grid on;
+title('Outer-loop root locus');
+
+%% Step tracking test
+theta_ref_deg = 5;
+theta_ref_rad = deg2rad(theta_ref_deg);
+
+t = 0:0.001:5;
+[y,t] = step(theta_ref_rad*T_theta, t);
+
+info = stepinfo(y, t, theta_ref_rad);
+
+fprintf('Rise time: %.4f s\n', info.RiseTime);
+fprintf('Peak time: %.4f s\n', info.PeakTime);
+fprintf('Overshoot: %.2f %%\n', info.Overshoot);
+fprintf('Settling time: %.4f s\n', info.SettlingTime);
+
+steady_state_error = abs(theta_ref_rad - y(end));
+fprintf('Steady-state error: %.6f rad (%.4f deg)\n', ...
+    steady_state_error, rad2deg(steady_state_error));
+
+t = 0:0.001:10;
+u = deg2rad(2)*sin(2*pi*0.5*t);
+
+y = lsim(T_theta, u, t);
+
+figure;
+plot(t, rad2deg(y), 'LineWidth', 1.5)
+hold on
+plot(t, rad2deg(u), '--', 'LineWidth', 1.2)
+grid on
+xlabel('Time (s)')
+ylabel('\theta (deg)')
+title('Sinusoidal reference tracking')
+legend('\theta(t)', '\theta_{ref}(t)')
