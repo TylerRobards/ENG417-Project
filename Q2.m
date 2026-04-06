@@ -126,7 +126,7 @@ A_long = [x_u x_w x_q x_theta; z_u z_w z_q z_theta; m_u m_w m_q m_theta; 0 0 1 0
 B_long = [x_delta_e x_delta_T; z_delta_e z_delta_T; m_delta_e m_delta_T; 0 0];
 C_long = eye(4);
 D_long = zeros(4,2);
-sys_long = ss(A_long, B_long, C_long, D_long);
+sys_long = ss(A_long, B_long, C_long, D_long)
 % Lateral Direction
 % xdot_lat = [betadot; pdot; rdot; phidot];
 % x_lat =[beta; p; r; phi];
@@ -137,14 +137,17 @@ C_lat = eye(4);
 D_lat = zeros(4,2);
 sys_lat = ss(A_lat, B_lat, C_lat, D_lat);
 %% Model Verification
-lat_poles = pole(sys_long)
-long_poles = pole(sys_lat)
+long_poles = pole(sys_long)
+long_zeros = zero(sys_long)
+lat_poles = pole(sys_lat)
+lat_zeros = zero(sys_lat)
+
 figure;
 pzplot(sys_long);
 figure;
 pzplot(sys_lat)
 
-t = 0:0.01:10; % Timescale for sims
+t = 0:0.01:50; % Timescale for sims
 %% a. 1% step in thrust
 u_long_dT = zeros(length(t),2);
 u_long_dT(:,1) = 0;
