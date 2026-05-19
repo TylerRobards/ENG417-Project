@@ -40,7 +40,7 @@ Nc = 5;     % To update as needed
 Np = 80;    % To update as needed
 R_weight = 10;       % larger value gives smoother elevator action
 
-climb_time = 25;   % seconds to ramp from 30000 ft to 32000 ft
+climb_time = 20;   % seconds to ramp from 30000 ft to 32000 ft
 
 x0 = [0;0;0];
 xm0 = [0;0];
@@ -63,7 +63,7 @@ for i = 1:k+1
 end
 
 Am = ATs;
-Bm = BTs(:,1);   % Take only the elevator control
+Bm = BTs(:,1)  % Take only the elevator control
 Cm = C;
 
 % xm[k+1] = Am*xm[k] + Bm*um[k[
@@ -80,7 +80,7 @@ tau_alt = 0.8;          % altimeter time constant in seconds
 a_alt = 1/tau_alt;
 Am = [Am, zeros(4,2);
        0, -Ts, 0, Ts*V0, 1, 0;
-       0,  0,  0, 0, Ts*a_alt, 1 - Ts*a_alt];
+       0,  0,  0, 0, Ts*a_alt, 1 - Ts*a_alt]
 Bm = [Bm;
        0;
        0];
